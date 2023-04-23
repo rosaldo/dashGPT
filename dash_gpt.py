@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
-"""
-pip install dash dash_bootstrap_components flask gunicorn requests pypdf2
-"""
-
 import base64
 import os
 
