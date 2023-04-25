@@ -6,10 +6,11 @@ import os
 
 import dash_bootstrap_components as dbc
 import llama_index
-import PyPDF2
 from dash import Dash, Input, Output, State, dcc, html
 from flask import Flask
-from llama_index import Document, GPTSimpleVectorIndex
+from langchain.chat_models import ChatOpenAI
+from llama_index import (GPTSimpleVectorIndex, LLMPredictor, ServiceContext,
+                         download_loader)
 
 from config import OPENAI_API_KEY
 
@@ -21,16 +22,17 @@ if not os.path.exists(folder):
     os.makedirs(folder)
 
 def create_index():
-    pdf_documents = []
+    pdf_reader = download_loader("PDFReader")
     files = os.listdir(folder)
+    documents = []
     for file in files:
         if file.endswith(".pdf"):
-            with open(os.path.join(folder, file), "rb") as pdf:
-                pdf_reader = PyPDF2.PdfReader(pdf)
-                for page in range(len(pdf_reader.pages)):
-                    page_text = pdf_reader.pages[page].extract_text()
-                    pdf_documents.append(Document(page_text))
-    index = GPTSimpleVectorIndex.from_documents(pdf_documents)
+            pdf = f"{path}/dash_gpt_pdf/{file}"
+            document = pdf_reader().load_data(pdf)
+            documents.append(document[0])
+    llm_predictor = LLMPredictor(llm=ChatOpenAI(model_name="gpt-4-32k"))
+    service_context = ServiceContext.from_defaults(llm_predictor=llm_predictor, chunk_size_limit=4096)
+    index = GPTSimpleVectorIndex.from_documents(documents, service_context=service_context)
     index.save_to_disk(index_json)
 
 create_index()
