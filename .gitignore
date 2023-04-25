@@ -1,5 +1,7 @@
 #dashGPT
 config.py
+dash_gpt.json
+dash_gpt_pdf
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
