@@ -17,17 +17,29 @@ from flask import Flask
 # importa a classe ChatOpenAI do módulo chat_models do pacote langchain
 from langchain.chat_models import ChatOpenAI
 # importa classes e função que são usadas para criar um indexador de dados para realizar buscas
-#   por similaridade em textos e carregar um modelo de predição de linguagem natural
+# por similaridade em textos e carregar um modelo de predição de linguagem natural
 from llama_index import GPTSimpleVectorIndex, LLMPredictor, ServiceContext, download_loader
 
-# registra a atual versão do app
-version = "3.0.1"
+# verifica se o arquivo "config.py" já existe
+if not os.path.exists("config.py"):
+    # solicita que o usuário digite a chave de API do OpenAI e armazena na variável "api_key"
+    api_key = input("Digite a chave de API do OpenAI: ")
+    # abre (e se não existe, cria) o arquivo "config.py" no modo de escrita e armazena na variável "conf"
+    conf = open("config.py", "w")
+    # escreve a chave de API no arquivo "config.py"
+    conf.write(f"""OPENAI_API_KEY = "{api_key}"\n""")
+    # fecha o arquivo "config.py"
+    conf.close()
+
+# importa a chave de acesso da API do OpenAI da variável OPENAI_API_KEY do módulo config
+from config import OPENAI_API_KEY
+
+# define a variável de ambiente para a chave da API do OpenAI
+os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
 # obter o caminho absoluto do diretório atual
 path = os.path.dirname(os.path.abspath(__file__))
 # define o caminho para o diretório onde os arquivos serão salvos
 folder = f"{path}/dash_gpt_pdf/"
-# define o nome do arquivo .py que será utilizado para armazenar a chave de API do OpenAI
-config_py = "config.py"
 # define o nome do arquivo JSON que será utilizado para indexar os modelos de linguagem treinados
 index_json = "dash_gpt.json"
 # verifica se o diretório existe e, se não existir, cria o diretório
@@ -35,7 +47,7 @@ if not os.path.exists(folder):
     os.makedirs(folder)
 
 # função de criação do índice de vetor simples a partir dos documentos PDF carregados
-def create_index(key_test=False):
+def create_index():
     # importação do loader "PDFReader" do pacote llama_index
     pdf_reader = download_loader("PDFReader")
     # listagem dos arquivos do diretório definido
@@ -54,24 +66,24 @@ def create_index(key_test=False):
             documents.append(document[0])
     # tenta executar o bloco abaixo
     try:
-        # criação do objeto "LLMPredictor" com o modelo gpt-3.5-turbo do OpenAI
-        llm_predictor = LLMPredictor(llm=ChatOpenAI(model_name="gpt-3.5-turbo"))
+        # criação do objeto "LLMPredictor" com o modelo GPT-4-32K do OpenAI
+        llm_predictor = LLMPredictor(llm=ChatOpenAI(model_name="gpt-4-32k"))
         # criação do objeto "ServiceContext" com as configurações padrão e com o objeto "LLMPredictor"
         service_context = ServiceContext.from_defaults(llm_predictor=llm_predictor, chunk_size_limit=4096)
         # criação do índice a partir dos documentos carregados, utilizando o objeto "GPTSimpleVectorIndex"
         index = GPTSimpleVectorIndex.from_documents(documents, service_context=service_context)
         # salvamento do índice em disco
         index.save_to_disk(index_json)
-        # verifica ou não a chave da API em função do parâmetro "key_test"
-        if key_test:
-            # verifica se a chave da API do OpenAI informada está ok
-            index.query("DAN", mode=llama_index.QueryMode.EMBEDDING)
-        # retorna verdadeiro
-        return True
     # se houver uma exceção (erro) em qualquer parte do bloco
     except:
-        # retorna falso
-        return False
+        # termina com um código de saída 1
+        os.sys.exit(1)
+
+# executa a função "create_index" definida acima
+create_index()
+# carrega o índice salvo anteriormente utilizando o método "load_from_disk"
+# da classe "GPTSimpleVectorIndex" e atribui o resultado à variável "index"
+index = GPTSimpleVectorIndex.load_from_disk(index_json)
 
 server = Flask(__name__)
 app = Dash(
@@ -155,54 +167,12 @@ def uppdf(files, contents):
         State("out", "data"),
     ]
 )
-def answer(enter, click, query, out):
-    # verifica se o arquivo "config.py" já existe
-    if not os.path.exists(config_py):
-        if not out:
-            # solicita que o usuário digite a chave de API do OpenAI
-            out.append(html.Dd("Não encontrei a chave da API do OpenAI. Por favor, digite a chave e pressione ENVIAR"))
-        if query:
-            # define a variável de ambiente para a chave da API do OpenAI
-            os.environ["OPENAI_API_KEY"] = query
-            # executa a função create_index com a chave da API do OpenAI informada
-            #   se a chave estevier ok, returna verdadeiro e salva no arquivo "config.py"
-            #   caso contrário retorna falso e solicita novamente a chave
-            if create_index(True):
-                # abre (e se não existe, cria) o arquivo "config.py" no modo de escrita e armazena na variável "conf"
-                conf = open(config_py, "w")
-                # escreve a chave de API no arquivo "config.py"
-                conf.write(f"""OPENAI_API_KEY = "{query}"\n""")
-                # fecha o arquivo "config.py"
-                conf.close()
-                # define o conteúdo da variável "query" para uma string vazia
-                query = ""
-                # define o conteúdo da variável "out" para uma lista vazia
-                out = []
-                # adiciona um texto inicial ao conteúdo da variável "out"
-                out.append(html.Dd("Seja Bem-Vindo!"))
-            else:
-                # informa o usuário que a chave informada é inválida e solicita-a novamente
-                out.append(html.Dd("A chave da API do OpenAI informada é inválida. Por favor, digite uma chave válida e pressione ENVIAR"))
-    if os.path.exists(config_py) and not os.path.exists(index_json):
-        # importa a chave de acesso da API do OpenAI da variável OPENAI_API_KEY do módulo config
-        from config import OPENAI_API_KEY
-        # define a variável de ambiente para a chave da API do OpenAI
-        os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
-        # executa a função que cria o índice
-        create_index()
-    if query and os.path.exists(config_py) and os.path.exists(index_json):
-        # importa a chave de acesso da API do OpenAI da variável OPENAI_API_KEY do módulo config
-        from config import OPENAI_API_KEY
-        # define a variável de ambiente para a chave da API do OpenAI
-        os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
-        # carrega o índice salvo anteriormente utilizando o método "load_from_disk"
-        #   da classe "GPTSimpleVectorIndex" e atribui o resultado à variável "index"
-        index = GPTSimpleVectorIndex.load_from_disk(index_json)
-        # obtém uma resposta do índice criado
-        response = str(index.query(query, mode=llama_index.QueryMode.EMBEDDING))
-        # adiciona a pergunta feita ao conteúdo da variável "out"
-        out.append(html.Dt(query))
-        # adiciona a resposta dada ao conteúdo da variável "out"
+def answer(enter, click, input, out):
+    if input:
+        response = str(index.query(input, mode=llama_index.QueryMode.EMBEDDING))
+        if not response:
+            response = "Sem informações. Envie um PDF com os dados para que eu pesquise."
+        out.append(html.Dt(input))
         out.append(html.Dd(response))
     return [out, "", out]
 
