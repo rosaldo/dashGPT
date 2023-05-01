@@ -17,7 +17,7 @@ source dashGPT/venv/bin/active
 ```
 
 ```
-pip install -r requirements.txt
+pip install -r dashGPT/requirements.txt
 ```
 
 ## Run this app
